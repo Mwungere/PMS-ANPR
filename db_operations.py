@@ -397,4 +397,23 @@ def get_peak_hours():
         print(f"Error getting peak hours: {e}")
         return []
     finally:
+        release_db_connection(conn)
+
+def is_vehicle_inside(plate_number):
+    """Check if a vehicle is currently in the parking lot"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT COUNT(*) 
+                FROM parking_entries 
+                WHERE plate_number = %s 
+                AND exit_timestamp IS NULL
+            """, (plate_number,))
+            count = cur.fetchone()[0]
+            return count > 0
+    except Exception as e:
+        print(f"Error checking vehicle status: {e}")
+        return False
+    finally:
         release_db_connection(conn) 

@@ -19,6 +19,35 @@ import platform
 # Load YOLOv8 model (same model as entry)
 model = YOLO(r'best.pt')
 
+# Initialize Arduino connection
+def detect_arduino_port():
+    ports = list(serial.tools.list_ports.comports())
+    system = platform.system()
+    for port in ports:
+        if system == "Linux":
+            if "ttyUSB" in port.device or "ttyACM" in port.device:
+                return port.device
+        elif system == "Darwin":
+            if "usbmodem" in port.device or "usbserial" in port.device:
+                return port.device
+        elif system == "Windows":
+            if "COM11" in port.device:  # Assuming COM11 is your Arduino port
+                return port.device
+    return None
+
+# Global arduino object
+arduino_port = detect_arduino_port()
+arduino = None
+if arduino_port:
+    try:
+        arduino = serial.Serial(arduino_port, 9600, timeout=1)
+        time.sleep(2)  # Wait for Arduino to initialize
+        print(f"[CONNECTED] Arduino on {arduino_port}")
+    except Exception as e:
+        print(f"[ERROR] Failed to connect to Arduino: {e}")
+else:
+    print("[ERROR] Arduino not detected.")
+
 def is_valid_plate(plate):
     """Validate plate number format"""
     if not plate or len(plate) != 7:
@@ -32,21 +61,6 @@ def is_valid_plate(plate):
     return (prefix.isalpha() and prefix.isupper() and
             digits.isdigit() and 
             suffix.isalpha() and suffix.isupper())
-
-def detect_arduino_port():
-    ports = list(serial.tools.list_ports.comports())
-    system = platform.system()
-    for port in ports:
-        if system == "Linux":
-            if "ttyUSB" in port.device or "ttyACM" in port.device:
-                return port.device
-        elif system == "Darwin":
-            if "usbmodem" in port.device or "usbserial" in port.device:
-                return port.device
-        elif system == "Windows":
-            if "COM11" in port.device:
-                return port.device
-    return None
 
 def parse_arduino_data(line):
     """Parse the data received from Arduino"""
@@ -88,9 +102,9 @@ def process_exit(plate):
         if arduino:
             for _ in range(3):  # Buzz 3 times
                 arduino.write(b'2')  # Trigger warning buzzer
-                time.sleep(0.5)
+                time.sleep(0.1)
                 arduino.write(b'0')  # Stop buzzer
-                time.sleep(0.5)
+                time.sleep(0.1)
             print("[ALERT] Buzzer triggered multiple times")
         return False
 
@@ -103,16 +117,6 @@ def main():
     cap = cv2.VideoCapture(0)
     plate_buffer = []
     unauthorized_cooldown = 0  # Cooldown timer for unauthorized attempts
-
-    # Initialize Arduino connection
-    arduino_port = detect_arduino_port()
-    if arduino_port:
-        print(f"[CONNECTED] Arduino on {arduino_port}")
-        arduino = serial.Serial(arduino_port, 9600, timeout=1)
-        time.sleep(2)
-    else:
-        print("[ERROR] Arduino not detected.")
-        arduino = None
 
     print("[EXIT SYSTEM] Ready. Press 'q' to quit.")
 

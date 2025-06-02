@@ -6,7 +6,7 @@ import serial
 import serial.tools.list_ports
 from collections import Counter
 import pytesseract
-from db_operations import add_parking_entry
+from db_operations import add_parking_entry, is_vehicle_inside, add_alert
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 model = YOLO(r'best.pt')
@@ -20,16 +20,21 @@ def detect_arduino_port():
             return port.device
     return None
 
+# Initialize Arduino connection
 arduino_port = detect_arduino_port()
+arduino = None
 if arduino_port:
-    print(f"[CONNECTED] Arduino on {arduino_port}")
-    arduino = serial.Serial(arduino_port, 9600, timeout=1)
-    time.sleep(2)
+    try:
+        arduino = serial.Serial(arduino_port, 9600, timeout=1)
+        time.sleep(2)  # Wait for Arduino to initialize
+        print(f"[CONNECTED] Arduino on {arduino_port}")
+    except Exception as e:
+        print(f"[ERROR] Failed to connect to Arduino: {e}")
 else:
     print("[ERROR] Arduino not detected.")
-    arduino = None
 
 def mock_ultrasonic_distance():
+    """Mock function for ultrasonic sensor"""
     return 30  # Simulated distance in cm
 
 cap = cv2.VideoCapture(0)
@@ -85,6 +90,26 @@ while True:
                             if len(plate_buffer) >= 3:
                                 most_common = Counter(plate_buffer).most_common(1)[0][0]
                                 current_time = time.time()
+
+                                # Check if vehicle is already inside
+                                if is_vehicle_inside(most_common):
+                                    print(f"[DENIED] Vehicle {most_common} is already in the parking lot")
+                                    # Log unauthorized entry attempt
+                                    add_alert(
+                                        "DUPLICATE_ENTRY",
+                                        most_common,
+                                        f"Vehicle {most_common} attempted to enter while already inside"
+                                    )
+                                    # Trigger warning buzzer
+                                    if arduino:
+                                        for _ in range(3):  # Buzz 3 times
+                                            arduino.write(b'2')  # Trigger warning buzzer
+                                            time.sleep(0.5)
+                                            arduino.write(b'0')  # Stop buzzer
+                                            time.sleep(0.5)
+                                        print("[ALERT] Buzzer triggered for duplicate entry")
+                                    plate_buffer.clear()
+                                    continue
 
                                 if (most_common != last_saved_plate or
                                     (current_time - last_entry_time) > entry_cooldown):
