@@ -1,0 +1,8 @@
+opencv-python
+numpy
+psycopg2-binary
+python-dotenv
+pyserial
+flask
+flask-socketio
+plotly 
