@@ -94,14 +94,28 @@ def process_payment(plate, balance, ser):
                 amount_due
             )
             if success:
+                # Calculate new balance
+                new_balance = balance - amount_due
                 print(f"[PAYMENT] Processed payment of RWF {amount_due} for {plate}")
+                print(f"[PAYMENT] New balance: RWF {new_balance}")
+                
+                # Send new balance to Arduino
+                if ser:
+                    ser.write(f"{new_balance}\n".encode())
+                    print(f"[ARDUINO] Sent new balance: {new_balance}")
                 return True
             else:
                 print(f"[ERROR] Failed to process payment for {plate}")
+                if ser:
+                    ser.write("I\n".encode())  # Send 'I' for invalid/error
         else:
             print(f"[ERROR] Insufficient balance. Required: RWF {amount_due}, Available: RWF {balance}")
+            if ser:
+                ser.write("I\n".encode())  # Send 'I' for insufficient funds
     else:
         print(f"[ERROR] No unpaid entry found for {plate}")
+        if ser:
+            ser.write("I\n".encode())  # Send 'I' for invalid/error
     return False
 
 # Initialize Arduino connection
